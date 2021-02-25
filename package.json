@@ -1,7 +1,7 @@
 {
   "name": "obutils",
   "description": "Etendo utilities",
-  "version": "1.0",
+  "version": "1.0.0",
   "author": "Angel Eduardo",
   "bin": {
     "obutils": "./bin/run"
