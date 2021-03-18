@@ -150,9 +150,7 @@ const askForColumnName = async (instance, fullTable) => {
   );
 
   if (columnName.length > 30) {
-    instance.log(
-      "Invalid column length. Max character limit is 30 characters."
-    );
+    cli.info("Invalid column length. Max character limit is 30 characters.");
     return await askForColumnName(instance, fullTable);
   }
 
@@ -175,11 +173,11 @@ const askForForeignKey = async (instance, fullTable) => {
   let constraintName = `${fullTable}_${externalTableName}`;
 
   if (constraintName.length > 30) {
-    instance.log(
+    cli.info(
       `The generated constraint would be ${constraintName} and it is too long to be exported by Etendo. It will be shortened to 30 characters.`
     );
     constraintName = shortenConstraintName(constraintName);
-    instance.log(`The shortened constraint name is ${constraintName}.`);
+    cli.info(`The shortened constraint name is ${constraintName}.`);
   }
 
   return {
@@ -200,7 +198,7 @@ const createTableWizard = async (instance) => {
   let fullTable = `${tablePrefix}_${tableName}`;
 
   if (fullTable.length > 30) {
-    instance.log(
+    cli.info(
       `The table name length is larger than 30. Because of this, it will be shortened to 30 characters. Are you agree, or do you want to retry?`
     );
 
@@ -239,11 +237,20 @@ const createTableWizard = async (instance) => {
     }
 
     if (!COLUMN_TYPES[columnType]) {
-      instance.log("Invalid column type.");
+      cli.info("Invalid column type.");
       continue;
     }
 
     const columnName = await askForColumnName(instance, fullTable);
+
+    const alreadyExists = columns.some((col) => col.columnName === columnName);
+
+    if (alreadyExists) {
+      cli.warn(
+        `The column name ${columnName} already exists. Please, elect another one.`
+      );
+      continue;
+    }
 
     const isNotNull = toBoolean(
       await cli.prompt(`[${instance.pivot}][${fullTable}] Not Null? (Y/N) `)
@@ -299,11 +306,11 @@ const createTableWizard = async (instance) => {
         let constraintName = `${fullTable}_${columnName}_chk`;
 
         if (constraintName.length > 30) {
-          instance.log(
+          cli.info(
             `The check constraint for column ${columnName} which is ${constraintName} is too long to be exported by Etendo. It will be shortened to 30 characters.`
           );
           constraintName = shortenConstraintName(constraintName);
-          instance.log(
+          cli.info(
             `The check constraint has been shortened to ${constraintName}`
           );
         }
@@ -342,14 +349,14 @@ const askPrintOrExecute = async (query, instance) => {
     printOrExecute !== "E" &&
     printOrExecute !== "S"
   ) {
-    instance.log(
+    cli.info(
       "Please, select a valid option. Write P to print the query, or E to execute it."
     );
-    return await askPrintOrExecute();
+    return await askPrintOrExecute(query, instance);
   }
 
   if (printOrExecute === "P") {
-    instance.log(query);
+    cli.info(query);
   }
 
   if (printOrExecute === "E") {
@@ -369,7 +376,7 @@ const askPrintOrExecute = async (query, instance) => {
       cli.action.start("Saving file...");
       const fileName = await FileHandler.save(null, query);
 
-      instance.log(`Query saved to file: ${fileName}`);
+      cli.info(`Query saved to file: ${fileName}`);
       cli.action.stop();
     } catch (error) {
       instance.error(error);
