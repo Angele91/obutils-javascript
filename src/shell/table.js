@@ -1,18 +1,9 @@
 const ShellHandler = require("../api/ShellHandler");
 const { cli } = require("cli-ux");
 const { FileHandler } = require("../api/FileHandler");
-
-const COLUMN_TYPES = {
-  1: "character varying (32)",
-  2: "character (1)",
-  3: "character varying (60)",
-  4: "character varying (255)",
-  5: "timestamp without time zone",
-  6: "character varying (2000)",
-  7: "numeric",
-  8: "character varying (10)",
-  9: "character varying (3000)",
-};
+const COLUMN_TYPES = require("../api/const/columnTypes");
+const DATA_TYPES = require("../api/const/datatypes");
+const _ = require("lodash");
 
 /**
  * @description Will shorten the name of a constraint.
@@ -399,8 +390,126 @@ const dropTable = async (tblName, instance) => {
   }
 };
 
+const askFor = async (name) => {
+  const result = await cli.prompt(`Enter ${name}: `);
+  if (!result || result === "") {
+    cli.info(`Invalid ${name}. Please, enter a valid ${name}`);
+    return askFor(name);
+  }
+
+  return result;
+};
+
+const getTypeName = ({ dataTypeID }) => {
+  return _.first(
+    Object.keys(DATA_TYPES).filter((key) => DATA_TYPES[key] === dataTypeID)
+  );
+};
+
+const parseColumnLabel = (field) => {
+  const { name, dataTypeModifier } = field;
+
+  return `${name} ${getTypeName(field)} (${dataTypeModifier})`;
+};
+
+const alterTable = async (instance) => {
+  const tblName = await askFor("table name");
+  const columnsQuery = `SELECT *
+  FROM ${tblName} where false
+     ;`;
+
+  cli.action.start(`Fetching column information...`);
+  const columnsResult = await instance.executeQuery(columnsQuery);
+
+  const columnMap = columnsResult.fields.reduce((prev, curr) => {
+    return {
+      ...prev,
+      [curr.name]: {
+        label: parseColumnLabel(curr),
+        column: curr,
+        name: curr.name,
+      },
+    };
+  }, {});
+
+  const selectedColumnID = await askFor(`column to alter: 
+  ${Object.values(columnMap)
+    .map((val) => `${val.column.columnID}) ${val.label}`)
+    .join("\n")}
+  `);
+
+  cli.styledJSON(selectedColumnID);
+
+  const selectedColumn = Object.values(columnMap).find(
+    (col) => col.column.columnID === Number(selectedColumnID)
+  );
+
+  /**
+   * TODO: Drop column, add foreign key, add check, remove constraint,
+   * TODO: rename column
+   */
+
+  const operation = await askFor(
+    `Enter operation to make to ${selectedColumn.label}: 
+    1) Drop column
+    2) Add Foreign Key
+    3) Add Check
+    4) Remove Constraint
+    5) Rename Column
+    `
+  );
+
+  if (operation === "1") {
+    await dropColumn(tblName, selectedColumn.name);
+  }
+};
+
+const dropColumn = async (tableName, columnName, instance) => {
+  let tblName = tableName;
+  let colName = columnName;
+  if (!tableName) {
+    tblName = await askFor("table name");
+  }
+
+  if (!colName) {
+    colName = await askFor("column name");
+  }
+
+  const query = `ALTER TABLE ${tblName} DROP COLUMN ${colName};`;
+
+  const operation = await askPrintOrExecute(query, instance);
+
+  if (operation === "P") {
+    cli.info(operation);
+  }
+
+  if (operation === "E") {
+    const result = await instance.executeQuery(query);
+    cli.styledJSON(result);
+  }
+
+  if (operation === "S") {
+    try {
+      cli.action.start("Saving file...");
+      const fileName = await FileHandler.save(null, query);
+
+      cli.info(`Query saved to file: ${fileName}`);
+      cli.action.stop();
+    } catch (error) {
+      instance.error(error);
+    }
+  }
+};
+
+const tableActions = ["create", "drop", "alter"];
 const table = async ({ instance, cmdArgs }) => {
   const [operation] = cmdArgs;
+
+  if (!tableActions.includes(operation)) {
+    cli.info(`Invalid table action. Use one of: ${tableActions.join(", ")}`);
+    return;
+  }
+
   if (operation === "create") {
     const query = await createTableWizard(instance);
     await askPrintOrExecute(query, instance);
@@ -409,6 +518,10 @@ const table = async ({ instance, cmdArgs }) => {
   if (operation === "drop") {
     const tblName = cmdArgs[1];
     await dropTable(tblName, instance);
+  }
+
+  if (operation === "alter") {
+    await alterTable(instance);
   }
 };
 

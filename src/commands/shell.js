@@ -34,6 +34,9 @@ class ShellCommand extends Command {
   }
 
   async initializePool() {
+    cli.info(
+      `Initializing pool with: (${this.dbUser}@${this.pivot} in ${this.dbHost}:${this.dbPort})`
+    );
     this.pool = new Pool({
       user: this.dbUser,
       host: this.dbHost,
@@ -73,6 +76,12 @@ class ShellCommand extends Command {
   }
 
   async run() {
+    if (!this.configManager.isConfigFileCreated()) {
+      await this.configManager.save(this);
+    }
+
+    await this.configManager.load(this);
+
     cli.action.start("Starting pool...");
     this.initializePool();
 
@@ -85,12 +94,6 @@ class ShellCommand extends Command {
     }
 
     cli.action.stop();
-
-    if (!this.configManager.isConfigFileCreated()) {
-      await this.configManager.save(this);
-    }
-
-    await this.configManager.load(this);
 
     while (this.active) {
       const command = await cli.prompt(`${this.getPivotPrefix()}`);
