@@ -462,21 +462,13 @@ const alterTable = async (instance) => {
   if (operation === "1") {
     await dropColumn(tblName, selectedColumn.name);
   }
+
+  if (operation === "2") {
+    await addForeignKey(tblName, null, selectedColumn.name, null, instance);
+  }
 };
 
-const dropColumn = async (tableName, columnName, instance) => {
-  let tblName = tableName;
-  let colName = columnName;
-  if (!tableName) {
-    tblName = await askFor("table name");
-  }
-
-  if (!colName) {
-    colName = await askFor("column name");
-  }
-
-  const query = `ALTER TABLE ${tblName} DROP COLUMN ${colName};`;
-
+const handlePrintSaveOrExecute = async (query, instance) => {
   const operation = await askPrintOrExecute(query, instance);
 
   if (operation === "P") {
@@ -499,6 +491,58 @@ const dropColumn = async (tableName, columnName, instance) => {
       instance.error(error);
     }
   }
+};
+
+const addForeignKey = async (
+  tableName,
+  externalTableName,
+  columnName,
+  externalColumnName,
+  instance
+) => {
+  let tblName = tableName,
+    extTblName = externalTableName,
+    colName = columnName,
+    extColName = externalColumnName,
+    fkName;
+
+  if (!tblName) {
+    tblName = await askFor("table name");
+  }
+
+  if (!extTblName) {
+    extTblName = await askFor("external table name");
+  }
+
+  if (!colName) {
+    colName = await askFor("column name");
+  }
+
+  if (!extColName) {
+    extColName = await askFor("external column name");
+  }
+
+  fkName = await askFor("foreign key name");
+
+  const query = `ALTER TABLE ${tblName} ADD CONTRAINT ${fkName} FOREIGN KEY (${colName}) REFERENCES ${extTblName}(${extColName});`;
+
+  await handlePrintSaveOrExecute(query, instance);
+};
+
+const dropColumn = async (tableName, columnName, instance) => {
+  let tblName = tableName;
+  let colName = columnName;
+  if (!tableName) {
+    tblName = await askFor("table name");
+  }
+
+  if (!colName) {
+    colName = await askFor("column name");
+  }
+
+  const query = `ALTER TABLE ${tblName} DROP COLUMN ${colName};`;
+
+  await handlePrintSaveOrExecute(query, instance);
 };
 
 const tableActions = ["create", "drop", "alter"];
