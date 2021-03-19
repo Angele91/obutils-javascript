@@ -2,6 +2,7 @@ const ShellHandler = require("../api/ShellHandler");
 const { cli } = require("cli-ux");
 const { FileHandler } = require("../api/FileHandler");
 const COLUMN_TYPES = require("../api/const/columnTypes");
+const COLUMN_TYPE_DESCRIPTIONS = require("../api/const/columnTypeDescription");
 const DATA_TYPES = require("../api/const/datatypes");
 const _ = require("lodash");
 
@@ -44,7 +45,7 @@ const generateCreateColumnsQuery = (columns = []) => {
       }`
   ).join(`,
     `);
-  return columnsQuery;
+  return columnsQuery === "" ? "" : `${columnsQuery},`;
 };
 
 const generateCreateConstraintsQuery = (constraints = []) => {
@@ -72,7 +73,7 @@ const generateCreateConstraintsQuery = (constraints = []) => {
   ).join(`,
   `);
 
-  return constraintsQuery;
+  return constraintsQuery === "" ? "" : `${constraintsQuery},`;
 };
 
 const generateCreateIndexQuery = (indexes = []) => {
@@ -105,8 +106,8 @@ created timestamp without time zone DEFAULT now(),
 createdby character varying(32) NOT NULL,
 updated timestamp without time zone DEFAULT now(),
 updatedby character varying(32),
-${generateCreateColumnsQuery(columns)},
-${generateCreateConstraintsQuery(constraints)},
+${generateCreateColumnsQuery(columns)}
+${generateCreateConstraintsQuery(constraints)}
 CONSTRAINT ${fullTableName}_pk PRIMARY KEY (${fullTableName}_id),
 CONSTRAINT ${fullTableName}_client FOREIGN KEY (ad_client_id)
   REFERENCES public.ad_client (ad_client_id) MATCH SIMPLE
@@ -177,6 +178,20 @@ const askForForeignKey = async (instance, fullTable) => {
     constraintName,
     isLinkToParentColumn,
   };
+};
+
+const askForColumnType = async (label) => {
+  const columnType = await cli.prompt(`${label}
+  ${Object.keys(COLUMN_TYPES)
+    .map(
+      (key) => `${key}) ${COLUMN_TYPES[key]} (${COLUMN_TYPE_DESCRIPTIONS[key]})`
+    )
+    .join("\n")}`);
+
+  if (!COLUMN_TYPES[columnType]) {
+    cli.info("Invalid column type.");
+    return await askForColumnType(label);
+  }
 };
 
 const createTableWizard = async (instance) => {
@@ -375,8 +390,10 @@ const askPrintOrExecute = async (query, instance) => {
   }
 };
 
-const dropTable = async (tblName, instance) => {
-  const query = `DROP TABLE ${tblName};`;
+const dropTable = async (tableName, instance) => {
+  const tblName = await askIfNotAvailable("table name", tableName);
+
+  const query = `DROP TABLE public.${tblName};`;
   const confirmation = toBoolean(
     await cli.prompt(
       `Are you sure do you want to try to delete the table ${tblName}? (Y/N)`
@@ -412,8 +429,8 @@ const parseColumnLabel = (field) => {
   return `${name} ${getTypeName(field)} (${dataTypeModifier})`;
 };
 
-const alterTable = async (instance) => {
-  const tblName = await askFor("table name");
+const alterTable = async (instance, tableName) => {
+  const tblName = await askIfNotAvailable("table name", tableName);
   const columnsQuery = `SELECT *
   FROM ${tblName} where false
      ;`;
@@ -436,9 +453,13 @@ const alterTable = async (instance) => {
   ${Object.values(columnMap)
     .map((val) => `${val.column.columnID}) ${val.label}`)
     .join("\n")}
+
+    Or 0 to stop altering.
   `);
 
-  cli.styledJSON(selectedColumnID);
+  if (selectedColumnID === "0") {
+    return;
+  }
 
   const selectedColumn = Object.values(columnMap).find(
     (col) => col.column.columnID === Number(selectedColumnID)
@@ -456,16 +477,88 @@ const alterTable = async (instance) => {
     3) Add Check
     4) Remove Constraint
     5) Rename Column
+    6) Change type of column
     `
   );
 
   if (operation === "1") {
-    await dropColumn(tblName, selectedColumn.name);
+    await dropColumn(tblName, selectedColumn.name, instance);
   }
 
   if (operation === "2") {
     await addForeignKey(tblName, null, selectedColumn.name, null, instance);
   }
+
+  if (operation === "3") {
+    await addCheck(tblName, selectedColumn.name, instance);
+  }
+
+  if (operation === "4") {
+    await removeConstraint(tblName, selectedColumn.name, instance);
+  }
+
+  if (operation === "5") {
+    await renameColumn(tblName, selectedColumn.name, null, instance);
+  }
+
+  if (operation === "6") {
+    await changeColumnType(tblName, selectedColumn.name, instance);
+  }
+
+  return await alterTable(instance, tblName);
+};
+
+const askIfNotAvailable = async (label, elem) => {
+  if (!elem) {
+    return await askFor(label);
+  }
+
+  return elem;
+};
+
+const changeColumnType = async (tableName, columnName, instance) => {
+  const tblName = await askIfNotAvailable("table name", tableName);
+  const colName = await askIfNotAvailable("colum name", columnName);
+  const newType = await askForColumnType("Enter a column type: ");
+
+  const query = `ALTER TABLE ${tblName} ALTER COLUMN ${colName} TYPE ${newType};`;
+
+  await handlePrintSaveOrExecute(query, instance);
+};
+
+const renameColumn = async (
+  tableName,
+  oldColumnName,
+  newColumnName,
+  instance
+) => {
+  const tblName = await askIfNotAvailable("table name", tableName);
+  const oldColName = await askIfNotAvailable("column name", oldColumnName);
+  const newColName = await askIfNotAvailable("new column name", newColumnName);
+
+  const query = `ALTER TABLE ${tblName} RENAME COLUMN ${oldColName} TO ${newColName};`;
+  await handlePrintSaveOrExecute(query, instance);
+};
+
+const removeConstraint = async (tableName, constraintName, instance) => {
+  const tblName = await askIfNotAvailable("table name", tableName);
+  const constName = await askIfNotAvailable("constraint name", constraintName);
+
+  const query = `ALTER TABLE ${tblName} DROP CONSTRAINT ${constName};`;
+
+  await handlePrintSaveOrExecute(query, instance);
+};
+
+const addCheck = async (tableName, instance) => {
+  let tblName = await askIfNotAvailable("table name", tableName);
+  let constraintName, check;
+
+  constraintName = await askFor("constraint name");
+  check = await askFor("check");
+
+  const query = `ALTER TABLE ${tblName} ADD CONSTRAINT ${constraintName} CHECK (${check});`;
+
+  await handlePrintSaveOrExecute(query, instance);
 };
 
 const handlePrintSaveOrExecute = async (query, instance) => {
@@ -500,29 +593,17 @@ const addForeignKey = async (
   externalColumnName,
   instance
 ) => {
-  let tblName = tableName,
-    extTblName = externalTableName,
-    colName = columnName,
-    extColName = externalColumnName,
-    fkName;
-
-  if (!tblName) {
-    tblName = await askFor("table name");
-  }
-
-  if (!extTblName) {
-    extTblName = await askFor("external table name");
-  }
-
-  if (!colName) {
-    colName = await askFor("column name");
-  }
-
-  if (!extColName) {
-    extColName = await askFor("external column name");
-  }
-
-  fkName = await askFor("foreign key name");
+  const tblName = await askIfNotAvailable("table name", tableName);
+  const colName = await askIfNotAvailable("column name", columnName);
+  const extTblName = await askIfNotAvailable(
+    "external table name",
+    externalTableName
+  );
+  const extColName = await askIfNotAvailable(
+    "external column name",
+    externalColumnName
+  );
+  const fkName = await askFor("foreign key name");
 
   const query = `ALTER TABLE ${tblName} ADD CONTRAINT ${fkName} FOREIGN KEY (${colName}) REFERENCES ${extTblName}(${extColName});`;
 
@@ -530,15 +611,8 @@ const addForeignKey = async (
 };
 
 const dropColumn = async (tableName, columnName, instance) => {
-  let tblName = tableName;
-  let colName = columnName;
-  if (!tableName) {
-    tblName = await askFor("table name");
-  }
-
-  if (!colName) {
-    colName = await askFor("column name");
-  }
+  let tblName = await askIfNotAvailable("table name", tableName);
+  let colName = await askIfNotAvailable("column name", columnName);
 
   const query = `ALTER TABLE ${tblName} DROP COLUMN ${colName};`;
 
