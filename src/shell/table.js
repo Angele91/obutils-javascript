@@ -205,6 +205,8 @@ const createColumnWizard = async (instance, tableName) => {
   const columnName = await askForColumnName(instance, tableName);
   const columnType = await askForColumnType("Select a column type: ");
   const notNull = await askForBooleanValue("NOT NULL");
+  const extraQueries = [];
+
   let notNullDefaultValue = "";
 
   if (notNull) {
@@ -216,7 +218,35 @@ const createColumnWizard = async (instance, tableName) => {
     }
   }
 
-  const query = `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType} ${notNullDefaultValue};`;
+  const isForeignKey = await askForBooleanValue("FOREIGN KEY");
+
+  if (isForeignKey) {
+    const {
+      externalTableName,
+      externalTableColumn,
+      constraintName,
+      isLinkToParentColumn,
+    } = await askForForeignKey(instance, tableName);
+
+    extraQueries.push(
+      `ALTER TABLE ${tableName} ADD CONSTRAINT ${constraintName} FOREIGN KEY (${columnName}) REFERENCES ${externalTableName}(${externalTableColumn});`
+    );
+
+    if (isLinkToParentColumn) {
+      const indexQuery = generateCreateIndexQuery([
+        {
+          fullTable: tableName,
+          columnName,
+        },
+      ]);
+
+      extraQueries.push(indexQuery);
+    }
+  }
+
+  const query = `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType} ${notNullDefaultValue}; ${extraQueries.join(
+    "\n"
+  )}`;
 
   await askPrintOrExecute(query, instance);
 };
