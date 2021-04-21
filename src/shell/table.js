@@ -194,6 +194,30 @@ const askForColumnType = async (label) => {
   }
 };
 
+const askForBooleanValue = async (label) => {
+  const val = await askFor(label);
+  return toBoolean(val);
+};
+
+const createColumnWizard = async (instance, tableName) => {
+  const columnName = await askForColumnName(instance, tableName);
+  const columnType = await askForColumnType("Select a column type: ");
+  const notNull = await askForBooleanValue("NOT NULL");
+  let notNullDefaultValue = "NOT NULL";
+
+  if (notNull) {
+    const shouldAddDefaultValue = await askForBooleanValue("DEFAULT");
+    if (shouldAddDefaultValue) {
+      const defaultValueInput = await askFor("default value");
+      notNullDefaultValue = `${notNullDefaultValue} DEFAULT ${defaultValueInput}`;
+    }
+  }
+
+  const query = `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType} ${notNullDefaultValue};`;
+
+  await askPrintOrExecute(query, instance);
+};
+
 const createTableWizard = async (instance) => {
   const tablePrefix = await cli.prompt(
     `[${instance.pivot}] Insert table prefix: `
@@ -226,7 +250,7 @@ const createTableWizard = async (instance) => {
   while (creatingColumns) {
     const columnType = await cli.prompt(`[${instance.prefix}][${fullTable}] Adding columns:
         1) Character Varying (32) (Used for ID references)
-        2) Character (1) (Used for Y/N values or boolean values) 
+        2) Character (1) (Used for Y/N values or boolean values)
         3) Character Varying (60) (Used for short generic values)
         4) Character Varying (255) (Used for long generic values)
         5) Timestamp Without Time Zone (Used for dates)
@@ -449,15 +473,21 @@ const alterTable = async (instance, tableName) => {
     };
   }, {});
 
-  const selectedColumnID = await askFor(`column to alter: 
+  const selectedColumnID = await askFor(`column to alter:
   ${Object.values(columnMap)
     .map((val) => `${val.column.columnID}) ${val.label}`)
     .join("\n")}
 
-    Or 0 to stop altering.
+    0 to stop altering.
+    -1 to create a column
   `);
 
   if (selectedColumnID === "0") {
+    return;
+  }
+
+  if (selectedColumnID === "-1") {
+    await createColumnWizard(instance, tableName);
     return;
   }
 
@@ -465,13 +495,8 @@ const alterTable = async (instance, tableName) => {
     (col) => col.column.columnID === Number(selectedColumnID)
   );
 
-  /**
-   * TODO: Drop column, add foreign key, add check, remove constraint,
-   * TODO: rename column
-   */
-
   const operation = await askFor(
-    `Enter operation to make to ${selectedColumn.label}: 
+    `Enter operation to make to ${selectedColumn.label}:
     1) Drop column
     2) Add Foreign Key
     3) Add Check
@@ -619,7 +644,8 @@ const dropColumn = async (tableName, columnName, instance) => {
   await handlePrintSaveOrExecute(query, instance);
 };
 
-const tableActions = ["create", "drop", "alter"];
+const tableActions = ["create", "drop", "alter", "rebase"];
+
 const table = async ({ instance, cmdArgs }) => {
   const [operation] = cmdArgs;
 
@@ -640,6 +666,10 @@ const table = async ({ instance, cmdArgs }) => {
 
   if (operation === "alter") {
     await alterTable(instance);
+  }
+
+  if (operation === "rebase") {
+    // WIP: Make rebase tables
   }
 };
 
