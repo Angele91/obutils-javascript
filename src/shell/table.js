@@ -188,14 +188,16 @@ const askForColumnType = async (label) => {
     )
     .join("\n")}`);
 
-  if (!COLUMN_TYPES[columnType]) {
+  if (!COLUMN_TYPES[columnType.trim()]) {
     cli.info("Invalid column type.");
     return await askForColumnType(label);
   }
+
+  return COLUMN_TYPES[columnType.trim()];
 };
 
 const askForBooleanValue = async (label) => {
-  const val = await askFor(label);
+  const val = await askFor(`${label} (Y/N)`);
   return toBoolean(val);
 };
 
@@ -203,9 +205,10 @@ const createColumnWizard = async (instance, tableName) => {
   const columnName = await askForColumnName(instance, tableName);
   const columnType = await askForColumnType("Select a column type: ");
   const notNull = await askForBooleanValue("NOT NULL");
-  let notNullDefaultValue = "NOT NULL";
+  let notNullDefaultValue = "";
 
   if (notNull) {
+    notNullDefaultValue = "NOT NULL";
     const shouldAddDefaultValue = await askForBooleanValue("DEFAULT");
     if (shouldAddDefaultValue) {
       const defaultValueInput = await askFor("default value");
@@ -487,8 +490,8 @@ const alterTable = async (instance, tableName) => {
   }
 
   if (selectedColumnID === "-1") {
-    await createColumnWizard(instance, tableName);
-    return;
+    await createColumnWizard(instance, tblName);
+    return alterTable(instance, tblName);
   }
 
   const selectedColumn = Object.values(columnMap).find(
