@@ -101,7 +101,7 @@ const generateCreateQuery = (
 ${fullTableName}_id character varying(32) NOT NULL,
 ad_client_id character varying(32) NOT NULL,
 ad_org_id character varying(32) NOT NULL,
-isactive character(1) NOT NULL DEFAULT 'N'::bpchar,
+isactive character(1) NOT NULL DEFAULT 'Y'::bpchar,
 created timestamp without time zone DEFAULT now(),
 createdby character varying(32) NOT NULL,
 updated timestamp without time zone DEFAULT now(),
