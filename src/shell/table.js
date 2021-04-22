@@ -291,10 +291,11 @@ const createTableWizard = async (instance) => {
         7) Numeric (For numeric values)
         8) Character Varying (10) (For short values)
         9) Character Varying (3000) (For long values)
-        10) Stop creating columns
+        10) Character Varying(9) (For hexadecimal values or colors)
+        11) Stop creating columns
         `);
 
-    if (columnType === "10") {
+    if (columnType === "11") {
       creatingColumns = false;
       continue;
     }
