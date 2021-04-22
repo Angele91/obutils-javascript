@@ -8,6 +8,7 @@ const COLUMN_TYPE_DESCRIPTIONS = {
   7: "For numeric values",
   8: "For short values",
   9: "For long values",
+  10: "For hexadecimal colors",
 };
 
 module.exports = COLUMN_TYPE_DESCRIPTIONS;

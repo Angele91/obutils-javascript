@@ -8,5 +8,6 @@ const COLUMN_TYPES = {
   7: "numeric",
   8: "character varying (10)",
   9: "character varying (3000)",
+  10: "character varying(9)",
 };
 module.exports = COLUMN_TYPES;
